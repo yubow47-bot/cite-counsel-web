@@ -1,3 +1,13 @@
+---
+title: McGill Legal Citation Tool
+emoji: 📚
+colorFrom: gray
+colorTo: blue
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # Cite Counsel
 
 Cite Counsel is an experimental web application for producing citations in the style of the *Canadian Guide to Uniform Legal Citation* (McGill Guide), 10th edition. It combines public metadata services, document extraction, and language-model-assisted classification and formatting.
