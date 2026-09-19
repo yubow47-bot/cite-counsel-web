@@ -173,7 +173,7 @@ def extract_from_image(image_path: str) -> dict:
     """Extract structured citation fields from a single image.
 
     Returns a dict matching the extract_from_url schema.
-    On failure, returns {"error": "<message>"} so the caller degrades to scaffold.
+    On failure, returns {"error": "<message>"} so the caller can report it as unsupported.
     """
     try:
         result = _call_gemini([image_path])

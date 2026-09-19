@@ -1,7 +1,7 @@
 """FastAPI TestClient for concept-route needs_selection fix.
 
 Ensures _handle_concept mirrors case_name: multiple results → needs_selection,
-single result → done, empty → needs_input.
+single result → done, empty → unsupported.
 """
 
 import sys
@@ -87,8 +87,8 @@ class TestConceptNeedsSelection:
         assert "Haida Nation" in body["data"]["citations"][0]["citation"]
         m_fmt.assert_called_once()
 
-    def test_empty_results_returns_needs_input(self):
-        """0 concept results → status=unsupported (scaffold disabled by default)."""
+    def test_empty_results_returns_unsupported(self):
+        """0 concept results → status=unsupported."""
         with (
             patch("api.main.classify_and_normalize") as m_cls,
             patch("api.main.search_citation") as m_search,

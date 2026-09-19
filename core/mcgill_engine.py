@@ -473,11 +473,11 @@ def get_rules(detected_type: str, subpattern: str | None = None) -> dict:
 #  government    | government_docs (top-level)      | government_docs              | — (LLM only)
 #  journal       | secondary_sources > Journal      | secondary_sources.journal_articles | build_journal_citation
 #  book          | secondary_sources > Books        | secondary_sources.books      | build_book_citation
-#  by_law        | by_law (top-level scaffold key)  | — (gap)                     | — (scaffold only)
-#  treaty        | treaty (top-level scaffold key)  | — (gap)                     | — (scaffold only)
-#  foreign       | foreign (top-level scaffold key) | — (gap)                     | — (scaffold only)
-#  news_online   | news_online (top-level scaffold) | — (gap)                     | — (scaffold only)
-#  website       | website (top-level scaffold key) | secondary_sources.websites   | — (LLM only)
+#  by_law        | by_law (top-level rules key)  | — (gap)                     | — (rules only)
+#  treaty        | treaty (top-level rules key)  | — (gap)                     | — (rules only)
+#  foreign       | foreign (top-level rules key) | — (gap)                     | — (rules only)
+#  news_online   | news_online (top-level rules key) | — (gap)                     | — (rules only)
+#  website       | website (top-level rules key) | secondary_sources.websites   | — (LLM only)
 #  general       | general_rules (top-level)        | general_rules (fallback)     | — (LLM only)
 #
 #  Key: "gap" = the type appears in one namespace but has no equivalent in

@@ -251,13 +251,40 @@ def extract_url(url: str) -> str | None:
     return trafilatura.extract(html, include_comments=False)
 
 
+def _page_title_tag(html: str) -> str:
+    """Text of the page's <title> element, or "" when absent."""
+    import html as _html
+    import re
+    m = re.search(r"<title[^>]*>(.*?)</title>", html, re.IGNORECASE | re.DOTALL)
+    return _html.unescape(re.sub(r"\s+", " ", m.group(1))).strip() if m else ""
+
+
+def _best_title(meta_title: str | None, tag_title: str | None) -> str | None:
+    """Pick the cleaner of the metadata title (og:title) and the <title> tag.
+
+    When one contains the other, the shorter is the clean one: it drops site
+    suffixes such as "| CBC News" and truncated/garbled og:title variants.
+    Unrelated titles keep the metadata title.
+    """
+    a = (meta_title or "").strip()
+    b = (tag_title or "").strip()
+    if not a or not b:
+        return a or b or None
+    la, lb = a.lower(), b.lower()
+    if la in lb:
+        return a
+    if lb in la:
+        return b
+    return a
+
+
 def extract_from_url(url: str) -> dict:
     """Fetch a URL with curl_cffi and extract structured citation fields.
 
     Uses trafilatura's JSON output to get title, author, date, and sitename
     directly from the page metadata, without needing DeepSeek for extraction.
-    Returns a dict with ``"error"`` key on failure so the caller can degrade
-    to the manual scaffold.
+    Returns a dict with ``"error"`` key on failure so the caller can
+    return an unsupported result.
     """
     # ── PDF URL short-circuit ──
     # We have no PDF text/byte parser in this module, so a .pdf-suffixed URL
@@ -294,7 +321,7 @@ def extract_from_url(url: str) -> dict:
 
     fields = {
         "url": url,
-        "page_title": meta.get("title") or None,
+        "page_title": _best_title(meta.get("title"), _page_title_tag(html)),
         "author": meta.get("author") or None,
         "date": meta.get("date") or None,
         "site_domain": hostname or None,

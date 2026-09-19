@@ -1,6 +1,6 @@
 """Regression test: bill c34 (and no-hyphen / mixed-case variants) must route to
 the bill path — LEGISinfo verification → build_bill_citation — not fall through
-to A2AJ legislation or scaffold.
+to A2AJ legislation or unsupported.
 
 This file self-tests when run via `pytest tests/test_bill_route.py -v` or
 `python tests/test_bill_route.py`. It does NOT make live HTTP calls to A2AJ or
@@ -80,12 +80,9 @@ def test_bill_route_not_legislation():
         )
 
 
-def test_unsupported_response_carries_suggested_type():
-    """When SCAFFOLD_ENABLED=false, the unsupported envelope must include data.type."""
+def test_unverified_bill_returns_unsupported():
+    """An unverifiable bill query yields an unsupported envelope, never a citation."""
     import asyncio
-
-    # Force SCAFFOLD_ENABLED off before importing anything that reads it
-    os.environ["SCAFFOLD_ENABLED"] = "false"
 
     from api.main import citation_query, CitationInput
 
@@ -101,9 +98,7 @@ def test_unsupported_response_carries_suggested_type():
 
         assert resp["route"] == "bill", f"route={resp['route']}, expected bill"
         assert resp["status"] == "unsupported", f"status={resp['status']}, expected unsupported"
-        assert resp["data"].get("type") == "bill", (
-            f"unsupported data must carry type='bill', got {resp['data']}"
-        )
+        assert not resp["data"].get("citations")
 
     asyncio.run(_run())
 
@@ -115,7 +110,7 @@ if __name__ == "__main__":
         ("test_classifier_regex_all_variants", test_classifier_regex_all_variants),
         ("test_classifier_llm_bill_fallback", test_classifier_llm_bill_fallback),
         ("test_bill_route_not_legislation", test_bill_route_not_legislation),
-        ("test_unsupported_response_carries_suggested_type", test_unsupported_response_carries_suggested_type),
+        ("test_unverified_bill_returns_unsupported", test_unverified_bill_returns_unsupported),
     ]:
         try:
             fn()

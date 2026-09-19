@@ -18,7 +18,7 @@ Every endpoint returns a uniform JSON object:
 {
   "ok": true,
   "route": "case_name | citation_number | legislation | constitutional_statutes | concept | journal | bill | select | file | url | chat | by_law | case | treaty | foreign | general_rules",
-  "status": "done | needs_selection | needs_input | unsupported | error",
+  "status": "done | needs_selection | unsupported | error",
   "data": {},
   "debug": null | {},
   "error": null | { "reason": "human-readable message" }
@@ -29,7 +29,7 @@ Every endpoint returns a uniform JSON object:
 |---|---|
 | `ok` | `true` for any handled outcome (including unsupported); `false` only for system errors |
 | `route` | the classification/processing path the backend chose |
-| `status` | `done` = result ready; `needs_selection` = multiple A2AJ candidates shown; `needs_input` = A2AJ grounding failed, show scaffold form; `unsupported` = genuinely no McGill path (Hansard etc.); `error` = system/validation failure |
+| `status` | `done` = result ready; `needs_selection` = multiple A2AJ candidates shown; `unsupported` = genuinely no McGill path (Hansard etc.); `error` = system/validation failure |
 | `data` | endpoint-specific payload |
 | `debug` | `null` in production; rich trace in dev (see DEBUG_RESPONSES below) |
 | `error` | `null` except when `status="error"`; `reason` is user-facing Chinese text |
@@ -40,8 +40,7 @@ Every endpoint returns a uniform JSON object:
 |---|---|---|
 | `done` | 200 | |
 | `needs_selection` | 200 | multiple A2AJ candidates shown |
-| `needs_input` | 200 | A2AJ grounding failed; show scaffold form |
-| `unsupported` | 200 | genuinely no scaffold (Hansard etc.) |
+| `unsupported` | 200 | could not be verified, or genuinely no McGill path (Hansard etc.) |
 | `error` | 4xx / 5xx | validation or system failure |
 
 ### Debug control (IP protection)
@@ -131,33 +130,6 @@ Each candidate carries the full structured fields that `format_citation` needs
 Frontend stores the array unchanged and passes it back to
 `/api/citation/select`.
 
-**Response** — grounding failed, show scaffold (`status="needs_input"`):
-
-Emitted when A2AJ / LEGISinfo returns zero verified results but a scaffold
-template exists for the query type.  Frontend switches to manual fill form
-using config from `GET /api/scaffold/config`.
-
-```json
-{
-  "ok": true,
-  "route": "case_name",
-  "status": "needs_input",
-  "data": {
-    "message": "Could not verify against our databases. Fill in the fields below to generate a McGill 10th citation.",
-    "prefill": { "style_of_cause": "NonExistent v Nobody 2024", "year": "2024" },
-    "suggested_type": "jurisprudence"
-  },
-  "error": null
-}
-```
-
-`prefill` is best-effort extraction from the raw query (year regex +
-route-based field assignment).  No LLM, no heuristics.  May be empty `{}`.
-
-`suggested_type` maps the classifier route to a scaffold type key (from
-`GET /api/scaffold/config`).  Frontend uses it to preselect the dropdown;
-user may switch to any other type.
-
 **Response** — unsupported:
 ```json
 {
@@ -204,7 +176,7 @@ or modified signatures return `status="unsupported"` and require a new search.
 
 **Request:** `multipart/form-data`, field name `file`.  
 Accepted: `.docx`, `.pdf`, `.pptx`, `.xlsx`.  
-Max size: `MAX_UPLOAD_MB` (env, default 10 MB).  Exceeding returns
+Max size: `MAX_UPLOAD_MB` (env, default 50 MB).  Exceeding returns
 `status="error"`.
 
 **Response:**
@@ -295,75 +267,12 @@ Used by HF Spaces anti-sleep ping.
 
 ---
 
-### 8. GET `/api/scaffold/config` — Scaffold field definitions
-
-Returns all citation types that support manual fill-in scaffolding and their
-field configurations.  **Dynamically generated from `mcgill_rules.json`** at
-call time — top-level keys with a `fields` array become type options.
-Clients may cache; config changes only when the rules JSON is updated.
-
-**Response:**
-```json
-{
-  "type_options": [
-    { "type": "by_law", "label": "Municipal By-law" },
-    { "type": "case", "label": "Court Case (Jurisprudence)" },
-    { "type": "legislation", "label": "Legislation / Statute" },
-    { "type": "treaty", "label": "Treaty / International Agreement" },
-    { "type": "foreign", "label": "Foreign Law" },
-    { "type": "bill", "label": "Bill (Parliamentary)" }
-  ],
-  "field_configs": {
-    "by_law": {
-      "template": "[name], By-law No [number] ([year]).",
-      "fields": [
-        { "key": "name", "label": "By-law Name", "placeholder": "e.g. Noise Control By-law", "required": true },
-        { "key": "number", "label": "By-law Number", "placeholder": "e.g. 2024-123", "required": true },
-        { "key": "year", "label": "Year", "placeholder": "YYYY", "required": true }
-      ]
-    }
-  }
-}
-```
-
-Templates marked with `TODO: verify against McGill 10th` are placeholders —
-verify format before production use.
-
----
-
-### 9. POST `/api/citation/assemble` — Manual scaffold assembly
-
-Deterministic template fill from user-supplied fields.  No LLM, no database
-lookup.  Result is always `verified: false`.
-
-**Request:**
-```json
-{
-  "type": "by_law",
-  "fields": { "name": "Noise Control By-law", "number": "2024-123", "year": "2024" }
-}
-```
-
-**Response:**
-```json
-{
-  "ok": true,
-  "route": "by_law",
-  "status": "done",
-  "data": {
-    "citations": [{ "citation": "Noise Control By-law, By-law No 2024-123 (2024).", "verified": false }]
-  }
-}
-```
-
----
-
 ## Environment variables
 
 | variable | default | description |
 |---|---|---|
 | `DEBUG_RESPONSES` | `false` | expose debug payload in responses (dev only) |
-| `MAX_UPLOAD_MB` | `10` | max uploaded file size |
+| `MAX_UPLOAD_MB` | `50` | max uploaded file size |
 | `ALLOWED_ORIGINS` | `http://localhost:3000` | CORS allowed origins, comma-separated |
 | `RATE_LIMIT_PER_MIN` | `30` | max requests/IP/minute |
 | `RATE_LIMIT_PER_HOUR` | `200` | max requests/IP/hour |

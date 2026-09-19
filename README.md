@@ -22,7 +22,7 @@ The browser application exposes three user flows:
 | --- | --- | --- |
 | Citation search | A query is classified, searched, and either formatted directly or returned as signed candidates for the user to choose from. Case and legislation lookups primarily use A2AJ; federal bill lookup uses LEGISinfo. | Classification and most formatting require an LLM provider. Coverage is limited by the upstream services. A database match verifies source metadata, not the final McGill formatting. |
 | URL, DOI, or ISBN | DOI metadata is resolved through Crossref; ISBN metadata through Open Library. Ordinary web pages are fetched and parsed before classification and formatting. | URL extraction does not execute JavaScript and rejects or fails on many blocked, dynamic, empty, or PDF URLs. DOI/ISBN lookup depends on upstream coverage. |
-| File or image | The API accepts PDF, DOCX, PPTX, XLSX, JPG/JPEG, PNG, and WebP files, extracts available content, classifies the source, and formats a citation. | Images and scanned PDFs require Gemini vision; scanned PDFs use at most the first three rendered pages. Text extraction and model output can be incomplete or wrong. The default upload limit is 10 MB. |
+| File or image | The API accepts PDF, DOCX, PPTX, XLSX, JPG/JPEG, PNG, and WebP files, extracts available content, classifies the source, and formats a citation. | Images and scanned PDFs require Gemini vision; scanned PDFs use at most the first three rendered pages. Text extraction and model output can be incomplete or wrong. The default upload limit is 50 MB. |
 
 When a search has several verified matches, the frontend asks the user to select one before formatting. Candidate payloads are HMAC-signed by the API and are rejected if altered.
 
@@ -48,7 +48,7 @@ FastAPI
   └─ Gemini or an OpenAI-compatible completion endpoint for model-assisted steps
 ```
 
-Other implemented API routes include health and warm-up checks, feedback collection, scaffold configuration/assembly, and a non-streaming chat endpoint. The current frontend does not expose the chat endpoint.
+Other implemented API routes include health and warm-up checks, feedback collection, and a non-streaming chat endpoint. The current frontend does not expose the chat endpoint.
 
 ## Technology stack
 
@@ -61,7 +61,7 @@ Key directories:
 
 ```text
 frontend/       Next.js application and component tests
-api/            FastAPI routes, request guards, and manual scaffold
+api/            FastAPI routes and request guards
 core/           citation formatting, spend tracking, and persistence helpers
 local_tools/    database adapters, URL guards, and file extraction
 llm_api/        Gemini and compatible-completions clients
@@ -125,12 +125,10 @@ Put backend secrets in a root `.env` file or in the deployment platform's secret
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `MAX_UPLOAD_MB` | `10` | Maximum accepted upload size. |
+| `MAX_UPLOAD_MB` | `50` | Maximum accepted upload size. |
 | `RATE_LIMIT_PER_MIN` / `RATE_LIMIT_PER_HOUR` | `30` / `200` | In-memory per-client request limits. |
 | `DAILY_SPEND_CAP_USD` | `10` | Daily model-spend guard. |
 | `DEBUG_RESPONSES` | `false` | Includes internal debug data in API responses when enabled; keep off publicly. |
-| `SCAFFOLD_ENABLED` | `false` | Enables the API manual-assembly route. |
-| `NEXT_PUBLIC_SCAFFOLD_ENABLED` | unset | Shows the manual form in the frontend when set to `true`; this is a public build-time flag. |
 | `HF_SPEND_DATASET` / `HF_TOKEN` | unset | Optional Hugging Face Dataset persistence for spend and feedback records. |
 | `DISCORD_FEEDBACK_WEBHOOK` | unset | Optional feedback notification destination. |
 | `NEXT_PUBLIC_GA_MEASUREMENT_ID` | unset | Optional public Google Analytics measurement ID. |

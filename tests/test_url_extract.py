@@ -155,8 +155,8 @@ class TestExtractUrlOnly:
         assert "Test Citation" in body["data"]["citations"][0]["citation"]
         m_extract.assert_called_once_with("https://example.com/article")
 
-    def test_url_extract_failure_scaffold(self):
-        """When extract_from_url returns an error → unsupported (scaffold disabled by default)."""
+    def test_url_extract_failure_unsupported(self):
+        """When extract_from_url returns an error → unsupported."""
         _reset_engine_source()
         with patch("api.main.extract_from_url") as m_extract:
             m_extract.return_value = {"error": "Could not fetch page"}
