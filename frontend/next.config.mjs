@@ -22,9 +22,6 @@ if (process.env.VERCEL_ENV === "production") {
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  typescript: {
-    ignoreBuildErrors: true,
-  },
   images: {
     unoptimized: true,
   },
