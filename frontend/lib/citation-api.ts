@@ -39,6 +39,48 @@ export interface Envelope {
   error: null | { reason: string }
 }
 
+const CITATION_STATUSES: readonly CitationStatus[] = [
+  "done",
+  "needs_selection",
+  "unsupported",
+  "error",
+]
+
+function isEnvelopeShape(json: unknown): json is Envelope {
+  if (typeof json !== "object" || json === null) return false
+  const obj = json as Record<string, unknown>
+  return (
+    typeof obj.ok === "boolean" &&
+    typeof obj.status === "string" &&
+    (CITATION_STATUSES as string[]).includes(obj.status) &&
+    typeof obj.data === "object" &&
+    obj.data !== null
+  )
+}
+
+/**
+ * Parse a fetch Response into an Envelope, validating its shape rather than
+ * blindly trusting `json as Envelope`. Deliberately does NOT branch on
+ * `res.ok` — the backend legitimately returns envelopes on 4xx/5xx (see
+ * callers), so a non-2xx status alone must not be treated as failure here.
+ * What it does reject is JSON that parses but isn't envelope-shaped, e.g. a
+ * gateway timeout page or proxy error body that happens to be valid JSON.
+ */
+export async function parseEnvelope(res: Response): Promise<Envelope> {
+  let json: unknown
+  try {
+    json = await res.json()
+  } catch {
+    throw new Error(`服务器返回了无法解析的响应（HTTP ${res.status}）`)
+  }
+
+  if (!isEnvelopeShape(json)) {
+    throw new Error(`服务器返回了格式不正确的响应（HTTP ${res.status}）`)
+  }
+
+  return json
+}
+
 /** POST /api/citation —— 提交原始引用文本 */
 export async function postCitation(input: string): Promise<Envelope> {
   return request("/api/citation", { input })
@@ -65,13 +107,7 @@ export async function postExtractFile(file: File): Promise<Envelope> {
     body: form,
   })
 
-  let json: unknown
-  try {
-    json = await res.json()
-  } catch {
-    throw new Error(`服务器返回了无法解析的响应（HTTP ${res.status}）`)
-  }
-  return json as Envelope
+  return parseEnvelope(res)
 }
 
 /** POST /api/extract/url —— 提交 URL / DOI / ISBN 提取引用 */
@@ -120,12 +156,6 @@ async function request(path: string, body: unknown): Promise<Envelope> {
     body: JSON.stringify(body),
   })
 
-  // 即使是 4xx/5xx，后端也可能返回信封结构；优先解析 JSON
-  let json: unknown
-  try {
-    json = await res.json()
-  } catch {
-    throw new Error(`服务器返回了无法解析的响应（HTTP ${res.status}）`)
-  }
-  return json as Envelope
+  // 即使是 4xx/5xx，后端也可能返回信封结构；parseEnvelope 不会因状态码拒绝
+  return parseEnvelope(res)
 }
