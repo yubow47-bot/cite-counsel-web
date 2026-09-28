@@ -1,4 +1,7 @@
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 # ── 扫描件判定阈值：文字不足此数视为扫描件 ──
 SCANNED_THRESHOLD = 50
@@ -192,15 +195,31 @@ Types:
 Text:
 {text_sample}"""
 
+    import requests
     from llm_api.deepseek_api import ask_deepseek
-    try:
-        result = ask_deepseek(prompt, disable_thinking=True).strip().lower()
-        valid = {"journal_article", "book", "book_chapter", "thesis", "report",
-                 "newspaper", "case", "legislation", "government_document", "website", "other"}
-        if result in valid:
-            return result
-    except Exception:
-        pass
+    valid = {"journal_article", "book", "book_chapter", "thesis", "report",
+             "newspaper", "case", "legislation", "government_document", "website", "other"}
+
+    # 冷启动时首个 DeepSeek 请求常在建连阶段失败（retries=0）。建连失败说明
+    # 请求没发出去，重试一次不会重复计费。
+    for attempt in range(2):
+        try:
+            result = ask_deepseek(prompt, disable_thinking=True).strip().lower()
+            if result in valid:
+                return result
+            logger.warning("classify_document_type: unexpected label %r", result[:40])
+            break
+        except requests.exceptions.ConnectionError as e:
+            logger.warning("classify_document_type: connect failed (attempt %d): %s", attempt + 1, e)
+        except Exception as e:
+            logger.warning("classify_document_type: LLM call failed: %s", e)
+            break
+
+    # LLM 分类失败时不要静默落到 "other"——那条路径只会吐出一个裸标题。
+    # 文本里有 DOI 基本就是期刊文章，CrossRef 路径会再做一次核实。
+    from local_tools.crossref_api import extract_doi
+    if extract_doi(raw_text):
+        return "journal_article"
     return "other"
 
 
