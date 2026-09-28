@@ -4,7 +4,7 @@ import re
 import time
 import logging
 
-from llm_api.deepseek_api import ask_deepseek
+from llm_api.deepseek_api import ask_deepseek, DEFAULT_MODEL, CONCEPT_MODEL
 from llm_api.gemini_api import call_gemini_text, call_gemini_text_structured
 from local_tools.a2aj_api import (
     fetch_by_citation,
@@ -300,7 +300,7 @@ def classify_and_normalize(query: str) -> dict:
             t0 = time.time()
             if _mark_first_deepseek_call():
                 logger.debug("[DUR] classify_and_normalize — fallback to DeepSeek API")
-            with prof.measure("llm.classify", model=os.getenv("LLM_DEFAULT_MODEL", "deepseek-v4-flash")):
+            with prof.measure("llm.classify", model=DEFAULT_MODEL):
                 content = ask_deepseek(prompt, disable_thinking=True)
             if timing.ENABLE_TIMING:
                 timing.report().add_llm("classify_and_normalize", time.time() - t0)
@@ -731,8 +731,8 @@ Rules:
     if not gemini_succeeded:
         try:
             t0 = time.time()
-            with prof.measure("llm.expand", model=os.getenv("LLM_CONCEPT_MODEL", "deepseek-v4-pro")):
-                raw = ask_deepseek(prompt, model=os.getenv("LLM_CONCEPT_MODEL", "deepseek-v4-pro"))
+            with prof.measure("llm.expand", model=CONCEPT_MODEL):
+                raw = ask_deepseek(prompt, model=CONCEPT_MODEL)
             if timing.ENABLE_TIMING:
                 timing.report().add_llm("expand_concept", time.time() - t0)
             _ds_elapsed = time.time() - t0

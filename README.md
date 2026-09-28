@@ -115,7 +115,7 @@ Put backend secrets in a root `.env` file or in the deployment platform's secret
 | `DEEPSEEK_API_KEY` | Default formatting and fallback model calls | Credential for the default DeepSeek completions endpoint. |
 | `LLM_COMPLETIONS_URL` | Optional | Replaces the default DeepSeek URL with an OpenAI-compatible endpoint. |
 | `OPENROUTER_API_KEY` or `LLM_API_KEY` | With a custom completions URL | Credential used for the compatible endpoint. |
-| `LLM_DEFAULT_MODEL` | Optional | Model identifier for compatible completion calls; defaults to `deepseek-v4-flash`. |
+| `LLM_DEFAULT_MODEL` | Optional | Model identifier for compatible completion calls; defaults to `deepseek-v4-flash` on DeepSeek direct, `qwen/qwen3.7-flash` on a custom endpoint. |
 | `GEMINI_TEXT_MODEL`, `GEMINI_VISION_MODEL` | Optional | Override the Gemini text and vision models. |
 | `NEXT_PUBLIC_API_BASE_URL` | Frontend deployment | Public base URL of the FastAPI service. |
 | `ALLOWED_ORIGINS` | Backend deployment | Comma-separated CORS origins; defaults to `http://localhost:3000`. |

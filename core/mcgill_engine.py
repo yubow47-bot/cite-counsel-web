@@ -3,7 +3,7 @@ import re
 import time
 import logging
 
-from llm_api.deepseek_api import ask_deepseek
+from llm_api.deepseek_api import ask_deepseek, DEFAULT_MODEL
 
 logger = logging.getLogger(__name__)
 from local_tools import timing_util as timing
@@ -866,7 +866,7 @@ def format_citation(extracted_fields: dict, doc_type: str | None = None) -> str:
     prompt = build_prompt(extracted_fields, detected_type, relevant_rules, subpattern=subpattern)
 
     t0 = time.time()
-    with prof.measure("llm.format", model=os.getenv("LLM_DEFAULT_MODEL", "deepseek-v4-flash")):
+    with prof.measure("llm.format", model=DEFAULT_MODEL):
         result = ask_deepseek(prompt, disable_thinking=True)
     if timing.ENABLE_TIMING:
         timing.report().add_llm("format_citation", time.time() - t0)

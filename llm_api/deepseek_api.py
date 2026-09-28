@@ -36,7 +36,18 @@ _load_env()
 # through it; LLM_DEFAULT_MODEL then names the provider's model id.
 DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
 COMPLETIONS_URL = os.getenv("LLM_COMPLETIONS_URL", DEEPSEEK_API_URL)
-DEEPSEEK_MODEL = os.getenv("LLM_DEFAULT_MODEL", "deepseek-v4-flash")
+
+# Model defaults follow the endpoint: a DeepSeek model id is meaningless to
+# OpenRouter and vice versa.  Env vars always win.  Single source of truth —
+# call sites import these instead of repeating the literals.
+_DIRECT_DEEPSEEK = COMPLETIONS_URL == DEEPSEEK_API_URL
+DEFAULT_MODEL = (os.getenv("LLM_DEFAULT_MODEL") or "").strip() or (
+    "deepseek-v4-flash" if _DIRECT_DEEPSEEK else "qwen/qwen3.7-flash"
+)
+CONCEPT_MODEL = (os.getenv("LLM_CONCEPT_MODEL") or "").strip() or (
+    "deepseek-v4-pro" if _DIRECT_DEEPSEEK else DEFAULT_MODEL
+)
+DEEPSEEK_MODEL = DEFAULT_MODEL  # legacy alias
 URL_EXTRACT_FETCH_TIMEOUT = 8
 
 # ── Track first call (DNS + TLS setup on new connection) ──

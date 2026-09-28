@@ -279,8 +279,8 @@ Used by HF Spaces anti-sleep ping.
 | `CANDIDATE_SIGNING_KEY` | random per process | HMAC key for candidate integrity; set the same secret on every worker/replica and preserve it across restarts |
 | `DEEPSEEK_DAILY_LIMIT` | `500` | max DeepSeek API calls/day |
 | `DEEPSEEK_API_KEY` | — | DeepSeek API key (already in `.env`) |
-| `LLM_DEFAULT_MODEL` | `deepseek-v4-flash` | default model for classification/formatting |
-| `LLM_CONCEPT_MODEL` | `deepseek-v4-pro` | model for concept expansion |
+| `LLM_DEFAULT_MODEL` | `deepseek-v4-flash` (DeepSeek direct) / `qwen/qwen3.7-flash` (custom endpoint) | default model for classification/formatting |
+| `LLM_CONCEPT_MODEL` | `deepseek-v4-pro` (DeepSeek direct) / `LLM_DEFAULT_MODEL` (custom endpoint) | model for concept expansion |
 
 ## Backend internals (not exposed)
 
