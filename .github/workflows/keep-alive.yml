@@ -9,5 +9,20 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Health check
-        run: curl -fsS "${{ vars.HF_HEALTH_URL }}" > /dev/null 2>&1 || echo "Health check failed (non-fatal)"
+      # Pings /api/warmup (derived from the /api/health URL in HF_HEALTH_URL):
+      # any request keeps the Space awake, and warmup additionally refreshes
+      # the backend's outbound connection pools (LLM + legal databases),
+      # which a bare health check does not.  Failures are LOUD: a silent
+      # no-op here is indistinguishable from a working keep-alive until a
+      # user hits a multi-minute cold start.
+      - name: Ping Space and warm upstream pools
+        env:
+          HF_HEALTH_URL: ${{ vars.HF_HEALTH_URL }}
+        run: |
+          if [ -z "$HF_HEALTH_URL" ]; then
+            echo "::error::HF_HEALTH_URL variable is not set — the Space is NOT being kept alive. Add it under Settings → Secrets and variables → Actions → Variables (the Space's https://<space>.hf.space/api/health URL)."
+            exit 1
+          fi
+          WARMUP_URL="${HF_HEALTH_URL/\/api\/health/\/api\/warmup}"
+          echo "Pinging $WARMUP_URL"
+          curl -fsS --max-time 60 "$WARMUP_URL"
