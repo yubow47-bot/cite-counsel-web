@@ -59,6 +59,25 @@ function isEnvelopeShape(json: unknown): json is Envelope {
 }
 
 /**
+ * Statuses returned by the reverse proxy in front of the backend (Hugging
+ * Face Spaces) while the container is asleep or booting — never an envelope.
+ */
+const GATEWAY_STATUSES: ReadonlySet<number> = new Set([502, 503, 504])
+
+/** The backend could not be reached through its proxy (cold start / outage). */
+export class GatewayError extends Error {
+  readonly status: number
+  constructor(status: number) {
+    super(
+      "The citation service is waking up or temporarily unavailable. " +
+        "Please try again in a few seconds.",
+    )
+    this.name = "GatewayError"
+    this.status = status
+  }
+}
+
+/**
  * Parse a fetch Response into an Envelope, validating its shape rather than
  * blindly trusting `json as Envelope`. Deliberately does NOT branch on
  * `res.ok` — the backend legitimately returns envelopes on 4xx/5xx (see
@@ -71,10 +90,12 @@ export async function parseEnvelope(res: Response): Promise<Envelope> {
   try {
     json = await res.json()
   } catch {
+    if (GATEWAY_STATUSES.has(res.status)) throw new GatewayError(res.status)
     throw new Error(`服务器返回了无法解析的响应（HTTP ${res.status}）`)
   }
 
   if (!isEnvelopeShape(json)) {
+    if (GATEWAY_STATUSES.has(res.status)) throw new GatewayError(res.status)
     throw new Error(`服务器返回了格式不正确的响应（HTTP ${res.status}）`)
   }
 
@@ -149,7 +170,7 @@ export async function postFeedbackMessage(note: string): Promise<void> {
   }
 }
 
-async function request(path: string, body: unknown): Promise<Envelope> {
+async function requestOnce(path: string, body: unknown): Promise<Envelope> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -158,4 +179,19 @@ async function request(path: string, body: unknown): Promise<Envelope> {
 
   // 即使是 4xx/5xx，后端也可能返回信封结构；parseEnvelope 不会因状态码拒绝
   return parseEnvelope(res)
+}
+
+async function request(path: string, body: unknown): Promise<Envelope> {
+  try {
+    return await requestOnce(path, body)
+  } catch (err) {
+    // One automatic retry for the cold-start window: a sleeping Space fails
+    // the first attempt (gateway 502/503/504 page, or the network error the
+    // browser raises while the proxy holds the connection) while the backend
+    // boots; the retry lands on the now-warm service.  An envelope-shaped
+    // answer — even 4xx/5xx — is a real backend verdict and is NOT retried.
+    const retriable = err instanceof GatewayError || err instanceof TypeError
+    if (!retriable) throw err
+    return await requestOnce(path, body)
+  }
 }
