@@ -33,9 +33,28 @@ generic_session = _requests.Session()
 
 # ── Shared retry helper for external HTTP calls ──────────────────────────────
 #
-# Provides split connect/read timeouts and a single automatic retry on
-# transient network errors (connection drops, DNS resolution failures,
-# server-side timeouts).  Does NOT retry on HTTP error status codes.
+# Provides split connect/read timeouts and automatic retries on transient
+# network errors.  Does NOT retry on HTTP error status codes.
+def _is_connect_phase(exc: BaseException) -> bool:
+    """True when the request failed before any bytes were sent (TCP connect
+    or DNS resolution).  Retrying is then safe for *any* HTTP method — the
+    server never saw the request, so even a non-idempotent POST cannot be
+    duplicated or double-charged.  This is the failure mode of a cold
+    container's first outbound call (cold DNS / TLS) seen in production.
+    """
+    if isinstance(exc, _requests.exceptions.ConnectTimeout):
+        return True
+    node, hops = exc, 0
+    while node is not None and hops < 5:
+        # urllib3's connect/DNS failures surface nested inside requests'
+        # ConnectionError; match by class name so any urllib3 version works.
+        if type(node).__name__ in ("NewConnectionError", "NameResolutionError"):
+            return True
+        node = node.__context__ or node.__cause__
+        hops += 1
+    return False
+
+
 def request_with_retry(
     session,
     method,
@@ -44,6 +63,7 @@ def request_with_retry(
     read_timeout=30,
     retries=1,
     backoff=0.3,
+    connect_retries=1,
     **kwargs,
 ):
     """Call ``session.request(method, url, timeout=(connect_timeout,
@@ -52,6 +72,12 @@ def request_with_retry(
     with ``backoff`` seconds between attempts.  Does **not** retry on HTTP
     error status codes (caller remains responsible for ``raise_for_status()``).
     Re-raises the last exception if all attempts fail.
+
+    Connect-phase failures (DNS resolution, TCP connect) get an *independent*
+    budget of ``connect_retries`` extra attempts that does not consume
+    ``retries``.  They are safe to retry for any method (nothing was sent),
+    which is what lets the POST call sites that set ``retries=0`` for
+    idempotency still survive a cold-start connect failure.
 
     Parameters
     ----------
@@ -69,23 +95,29 @@ def request_with_retry(
         Number of *additional* attempts after the first failure.
     backoff : float
         Seconds to sleep between attempts.
+    connect_retries : int
+        Additional attempts for connect-phase failures only, on top of
+        ``retries``.
     **kwargs
         Passed verbatim to ``session.request()`` (``params``, ``json``,
         ``headers``, ``verify``, …).
     """
     timeout = (connect_timeout, read_timeout)
-    last_exc = None
+    connect_budget = connect_retries
 
-    for attempt in range(retries + 1):
+    while True:
         try:
             return session.request(method, url, timeout=timeout, **kwargs)
         except (_requests.exceptions.ConnectionError, _requests.exceptions.Timeout) as exc:
-            last_exc = exc
-            if attempt < retries:
+            if connect_budget > 0 and _is_connect_phase(exc):
+                connect_budget -= 1
                 time.sleep(backoff)
+                continue
+            if retries <= 0:
+                raise
+            retries -= 1
+            time.sleep(backoff)
         # Any other exception (HTTPError, ValueError, …) propagates immediately.
-
-    raise last_exc  # type: ignore[misc]
 
 
 # ── Statute / regulation citation matching ───────────────────────────────────
