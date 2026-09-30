@@ -239,18 +239,32 @@ def _mark_first_request() -> bool:
 rate_limiter = RateLimiter()
 
 # ── LEGISinfo cache warm-up at boot ─────────────────────────────────────
-# Pre-fetch the current-session bill list so the module-level _CACHE is
-# populated when the first bill query arrives.  Failures are logged but do
-# NOT block app startup — the existing lazy-fetch-on-miss is the fallback.
+# Kicked off as a background task, deliberately NOT awaited: awaiting inside
+# the startup event blocks uvicorn from serving until the fetch finishes
+# (worst case ~60 s: read_timeout=30 with one retry), dragging out the
+# cold-start window the first waking request has to sit through.  Correctness
+# does not depend on this warm-up — the lazy-fetch-on-miss in
+# fetch_legisinfo_bills remains the fallback when the cache is cold.
+_BACKGROUND_TASKS: set = set()
+
+
 @app.on_event("startup")
 async def _warm_legisinfo_cache():
-    try:
-        from local_tools.legisinfo_api import fetch_legisinfo_bills
-        # Off the event loop: the fetch is a blocking HTTP GET + JSON parse.
-        bills = await run_in_threadpool(fetch_legisinfo_bills, force_refresh=True)
-        _logger.info("[STARTUP] LEGISinfo cache warmed — %d bills loaded in current session", len(bills))
-    except Exception as exc:
-        _logger.warning("[STARTUP] LEGISinfo cache warm-up failed (non-fatal): %s", exc)
+    import asyncio
+
+    async def _run():
+        try:
+            from local_tools.legisinfo_api import fetch_legisinfo_bills
+            # Off the event loop: the fetch is a blocking HTTP GET + JSON parse.
+            bills = await run_in_threadpool(fetch_legisinfo_bills, force_refresh=True)
+            _logger.info("[STARTUP] LEGISinfo cache warmed — %d bills loaded in current session", len(bills))
+        except Exception as exc:
+            _logger.warning("[STARTUP] LEGISinfo cache warm-up failed (non-fatal): %s", exc)
+
+    task = asyncio.create_task(_run())
+    # Hold a reference — the event loop only keeps weak refs to tasks.
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
 
 # ── CORS ──
 from fastapi.middleware.cors import CORSMiddleware
