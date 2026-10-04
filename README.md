@@ -10,13 +10,13 @@ pinned: false
 
 # Cite Counsel Web
 
-Cite Counsel Web is an experimental web application for producing citations in the style of the *Canadian Guide to Uniform Legal Citation* (McGill Guide), 10th edition. It combines public metadata services, document extraction, and language-model-assisted classification and formatting.
+Cite Counsel Web is an experimental web application that produces citations in the style of the *Canadian Guide to Uniform Legal Citation* (McGill Guide), 10th edition. It uses public metadata services, document extraction, and a language model to classify sources and format citations.
 
-This repository is under active development. A successful response is a research aid, not a guarantee that a citation is correct. Check every result against the source and the official McGill Guide before relying on it.
+The repository is under active development. Treat every result as a research aid and check it against the source and the official McGill Guide before relying on it.
 
 ## What is implemented
 
-The browser application exposes three user flows:
+The browser application has three user flows:
 
 | Flow | Implemented path | Important limits |
 | --- | --- | --- |
@@ -26,11 +26,11 @@ The browser application exposes three user flows:
 
 When a search has several verified matches, the frontend asks the user to select one before formatting. Candidate payloads are HMAC-signed by the API and are rejected if altered.
 
-A deterministic manual form also exists, but it is disabled by default. It must be enabled in both the frontend and API, and its output is explicitly marked unverified.
+A deterministic manual form also exists. It is disabled by default, must be enabled in both the frontend and the API, and marks its output as unverified.
 
-## Project architecture and request flow
+## Architecture and request flow
 
-Users enter a citation query, provide a file, or submit a URL in the Next.js interface. FastAPI routes the request through search or extraction as appropriate, formats the resulting source details, and returns a citation to the browser. Queries with several matches return candidates for user confirmation before the selected source is formatted.
+A user enters a citation query, uploads a file, or submits a URL in the Next.js interface. FastAPI sends the request through search or extraction, formats the source details, and returns a citation to the browser. If a query has several matches, the user picks one before it is formatted.
 
 ```mermaid
 flowchart TB
@@ -81,11 +81,11 @@ flowchart TB
     Result --> Display[Shown in the Next.js web interface]
 ```
 
-Other implemented API routes include health and warm-up checks, feedback collection, and a non-streaming chat endpoint. The current frontend does not expose the chat endpoint.
+The API also has health and warm-up checks, feedback collection, and a non-streaming chat endpoint. The frontend does not use the chat endpoint.
 
 ## External data sources
 
-These services provide source records or metadata; they do not certify that the final citation follows the Guide.
+These services supply source records and metadata. They do not check that the final citation follows the Guide.
 
 | Service | Used for | Credentials and limits |
 | --- | --- | --- |
@@ -149,11 +149,11 @@ Open `http://localhost:3000`. Unless overridden at build time, the frontend call
 
 ## Configuration
 
-Backend settings belong in the root `.env` file or deployment secrets; `.env` is ignored by Git. Never expose private keys through `NEXT_PUBLIC_` variables. No checked-in environment example is provided.
+Put backend settings in the root `.env` file or in deployment secrets. Git ignores `.env`. Never expose private keys through `NEXT_PUBLIC_` variables. The repository has no checked-in environment example.
 
-For text completions, the code supports one key for the configured OpenAI-compatible endpoint (`LLM_API_KEY`; `OPENROUTER_API_KEY` is also accepted). Set `LLM_COMPLETIONS_URL` to use that endpoint and `LLM_DEFAULT_MODEL` to select its model. The default endpoint is DeepSeek direct and requires `DEEPSEEK_API_KEY` instead. This completion setting is used for text-based fallback/search assistance and citation formatting; it does not configure image understanding.
+For text completions, the code takes one key for the configured OpenAI-compatible endpoint (`LLM_API_KEY`; `OPENROUTER_API_KEY` is also accepted). Set `LLM_COMPLETIONS_URL` to choose the endpoint and `LLM_DEFAULT_MODEL` to choose its model. The default endpoint is DeepSeek direct, which requires `DEEPSEEK_API_KEY` instead. This setting covers fallback search assistance and citation formatting. It does not configure image understanding.
 
-The current query classifier calls Gemini text, and image or scanned-PDF extraction calls Gemini Vision. Both use `GEMINI_API_KEY`, so a standard setup that needs these paths requires a separate Gemini key. A text-only compatible model cannot replace the visual/OCR capability; this repository has not wired a generic multimodal endpoint for those file paths. `GEMINI_TEXT_MODEL` and `GEMINI_VISION_MODEL` optionally override Gemini model names. Deployment-specific settings include `NEXT_PUBLIC_API_BASE_URL`, `ALLOWED_ORIGINS`, and a stable `CANDIDATE_SIGNING_KEY`; see the deployment notes below.
+The query classifier calls Gemini text, and image or scanned-PDF extraction calls Gemini Vision. Both use `GEMINI_API_KEY`, so a standard setup that needs these paths requires its own Gemini key. A text-only compatible model cannot do the vision and OCR work, and the repository has no generic multimodal endpoint for those file paths. `GEMINI_TEXT_MODEL` and `GEMINI_VISION_MODEL` optionally override the Gemini model names. Deployment settings include `NEXT_PUBLIC_API_BASE_URL`, `ALLOWED_ORIGINS`, and a stable `CANDIDATE_SIGNING_KEY`; see the deployment notes below.
 
 ## Verification
 
@@ -168,22 +168,22 @@ npm run lint
 npm run build
 ```
 
-Backend unit tests are collected from `tests/`; provider integrations are mostly mocked, so these checks do not establish live service availability.
+Backend tests live in `tests/`. Provider integrations are mostly mocked, so passing tests say nothing about whether the live services are up.
 
 ## Deployment
 
-The root Dockerfile runs the FastAPI backend on port `7860`; deploy the Next.js app separately and set `NEXT_PUBLIC_API_BASE_URL` to the backend URL. Configure backend CORS (`ALLOWED_ORIGINS`) for the frontend origin and use a stable `CANDIDATE_SIGNING_KEY` when running multiple workers. For a local container:
+The root Dockerfile runs the FastAPI backend on port `7860`. Deploy the Next.js app separately and set `NEXT_PUBLIC_API_BASE_URL` to the backend URL. Set `ALLOWED_ORIGINS` to the frontend origin, and use a stable `CANDIDATE_SIGNING_KEY` when running multiple workers. To run a local container:
 
 ```powershell
 docker build -t cite-counsel-api .
 docker run --rm -p 7860:7860 --env-file .env cite-counsel-api
 ```
 
-Additional backend settings and routes are documented in [`api_contract.md`](api_contract.md). The current API has no authentication; its rate limits are per process.
+[`api_contract.md`](api_contract.md) documents more backend settings and routes. The API has no authentication, and its rate limits apply per process.
 
 ## API response contract
 
-Application routes return a common JSON envelope:
+Application routes return the same JSON envelope:
 
 ```json
 {
@@ -200,6 +200,6 @@ Application routes return a common JSON envelope:
 
 ## Legal and project status
 
-This code does not include or replace the McGill Guide. The Guide is a separate copyrighted publication and remains the authoritative source for its rules.
+This project does not include or replace the McGill Guide, a separate copyrighted publication that remains the authority on its rules.
 
-This project is licensed under the [MIT License](LICENSE). The license applies to this project's code, not to the McGill Guide.
+The project's code is under the [MIT License](LICENSE). The license does not cover the McGill Guide.
