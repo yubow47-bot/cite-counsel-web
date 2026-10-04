@@ -73,3 +73,47 @@ class TestBuildBillCitation:
         cit = build_bill_citation(rec)
         assert "?" in cit
         assert cit.startswith("Bill X-1,")
+
+
+class TestOpenParliamentFallback:
+
+    def _resp(self, payload, status=200):
+        from unittest.mock import MagicMock
+        r = MagicMock()
+        r.status_code = status
+        r.json.return_value = payload
+        return r
+
+    def test_maps_records_onto_legisinfo_fields(self):
+        from unittest.mock import patch
+        from local_tools import legisinfo_api as li
+        payload = {
+            "objects": [{
+                "session": "44-1", "legisinfo_id": 123, "introduced": "2022-05-30",
+                "name": {"en": "An Act to amend certain Acts (firearms)"}, "number": "C-21",
+            }],
+            "pagination": {"next_url": None},
+        }
+        with patch.object(li, "request_with_retry", return_value=self._resp(payload)):
+            recs = li._fetch_openparliament("44-1")
+        assert recs[0]["BillNumberFormatted"] == "C-21"
+        assert recs[0]["ParlSessionCode"] == "44-1"
+        assert build_bill_citation(recs[0]) == (
+            "Bill C-21, *An Act to amend certain Acts (firearms)*, 1st Sess, 44th Parl, 2022."
+        )
+
+    def test_used_when_legisinfo_fetch_fails(self):
+        from unittest.mock import patch
+        from local_tools import legisinfo_api as li
+        rec = {"BillNumberFormatted": "C-21", "ParlSessionCode": "45-1"}
+        with patch.object(li, "_fetch_json", return_value=None), \
+             patch.object(li, "_fetch_openparliament", return_value=[rec]) as op, \
+             patch.object(li, "_CACHE", {}), patch.object(li, "_CACHE_TIME", {}):
+            assert li.fetch_legisinfo_bills(session="45-1") == [rec]
+        op.assert_called_once_with("45-1")
+
+    def test_http_error_returns_none(self):
+        from unittest.mock import patch
+        from local_tools import legisinfo_api as li
+        with patch.object(li, "request_with_retry", return_value=self._resp({}, status=503)):
+            assert li._fetch_openparliament("45-1") is None

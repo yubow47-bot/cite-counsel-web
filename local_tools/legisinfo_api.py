@@ -151,6 +151,62 @@ def _fetch_json(session: str | None = None) -> list | None:
     return None
 
 
+OPENPARLIAMENT_URL = "https://api.openparliament.ca/bills/"
+_OPENPARLIAMENT_HEADERS = {
+    "Accept": "application/json",
+    "API-Version": "v1",
+    "User-Agent": "CiteCounsel (https://citecounsel.com)",
+}
+
+
+def _fetch_openparliament(session: str) -> list | None:
+    """Fallback bill list from openparliament.ca, mapped onto LEGISinfo field names.
+
+    parl.ca answers 403 to requests from some cloud hosts (the Hugging Face
+    Space among them).  openparliament.ca mirrors LEGISinfo's bill data, so
+    the records it returns carry everything build_bill_citation needs:
+    number, long title, session, and introduction date.
+    """
+    m = re.fullmatch(r"(\d+)-(\d+)", session)
+    if not m:
+        return None
+    parl, sess = int(m.group(1)), int(m.group(2))
+    records: list[dict] = []
+    url: str | None = f"{OPENPARLIAMENT_URL}?session={session}&limit=500"
+    try:
+        while url:
+            resp = request_with_retry(
+                legisinfo_session, "GET", url, read_timeout=30, headers=_OPENPARLIAMENT_HEADERS,
+            )
+            if resp.status_code != 200:
+                logger.warning("[openparliament] fetch %s returned HTTP %s", url, resp.status_code)
+                return None
+            data = resp.json()
+            for b in data.get("objects", []):
+                number = b.get("number")
+                if not number:
+                    continue
+                name = b.get("name") or {}
+                records.append({
+                    "NumberCode": number,
+                    "BillNumberFormatted": number,
+                    "Id": b.get("legisinfo_id"),
+                    "BillId": b.get("legisinfo_id"),
+                    "LongTitleEn": name.get("en") or "",
+                    "ShortTitleEn": "",
+                    "ParliamentNumber": parl,
+                    "SessionNumber": sess,
+                    "ParlSessionCode": session,
+                    "IntroducedDateTime": b.get("introduced") or "",
+                })
+            nxt = (data.get("pagination") or {}).get("next_url")
+            url = f"https://api.openparliament.ca{nxt}" if nxt else None
+    except Exception as exc:
+        logger.warning("[openparliament] fetch for session %s failed: %s: %s", session, type(exc).__name__, exc)
+        return None
+    return records or None
+
+
 def fetch_legisinfo_bills(force_refresh: bool = False, session: str | None = None) -> list:
     """Get bill list with per-session cache. Cache TTL = CACHE_TTL seconds.
 
@@ -176,6 +232,8 @@ def fetch_legisinfo_bills(force_refresh: bool = False, session: str | None = Non
         logger.debug("[DUR] LEGISinfo fetch_legisinfo_bills — FIRST fetch (cold cache, HTTP + JSON parse)")
 
     data = _fetch_json(session=session)
+    if data is None:
+        data = _fetch_openparliament(session or _get_current_session())
     _fetch_elapsed = time.perf_counter() - _fetch_t0
 
     if data is not None:
