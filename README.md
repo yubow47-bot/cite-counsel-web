@@ -22,8 +22,6 @@ The repository is under active development. Treat every result as a research aid
 | API (Hugging Face Space) | [yubo47-mcgill-citation-api.hf.space](https://yubo47-mcgill-citation-api.hf.space) |
 | API health check | [/api/health](https://yubo47-mcgill-citation-api.hf.space/api/health) |
 
-The API is hosted on a Hugging Face Space that can sleep when idle, so the first request after a quiet period may be slow.
-
 ## What is implemented
 
 The browser application has three user flows:
