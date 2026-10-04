@@ -20,6 +20,17 @@ CACHE_TTL = 3600  # 1 hour — bills change throughout session
 
 BILLS_URL = "https://www.parl.ca/legisinfo/en/bills/json"
 
+# parl.ca sits behind a bot filter that can reject the default
+# python-requests User-Agent from cloud IPs, so send ordinary browser headers.
+_REQUEST_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/130.0 Safari/537.36"
+    ),
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-CA,en;q=0.9",
+}
+
 _CACHE: dict[str, list | None] = {}
 _CACHE_TIME: dict[str, float] = {}
 
@@ -122,13 +133,21 @@ def _fetch_json(session: str | None = None) -> list | None:
         url = BILLS_URL
         if session:
             url = f"{BILLS_URL}?parlsession={session}"
-        resp = request_with_retry(legisinfo_session, "GET", url, read_timeout=30)
-        resp.raise_for_status()
+        resp = request_with_retry(
+            legisinfo_session, "GET", url, read_timeout=30, headers=_REQUEST_HEADERS,
+        )
+        if resp.status_code != 200:
+            logger.warning(
+                "[LEGISinfo] fetch %s returned HTTP %s (content-type=%s, %d bytes)",
+                url, resp.status_code, resp.headers.get("Content-Type", ""), len(resp.content),
+            )
+            return None
         data = resp.json()
         if isinstance(data, list):
             return _restore_legacy_fields(data)
-    except Exception:
-        pass
+        logger.warning("[LEGISinfo] fetch %s returned non-list JSON (%s)", url, type(data).__name__)
+    except Exception as exc:
+        logger.warning("[LEGISinfo] fetch %s failed: %s: %s", url, type(exc).__name__, exc)
     return None
 
 
