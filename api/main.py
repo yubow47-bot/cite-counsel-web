@@ -36,6 +36,7 @@ from core.spend_tracker import spend_tracker
 from local_tools.citation_search import classify_and_normalize, search_citation
 from local_tools.file_extractor import extract_from_file, classify_document_type
 from local_tools.openlibrary_api import extract_isbn
+from local_tools.crossref_api import extract_doi
 from llm_api.deepseek_api import extract_from_url, chat_deepseek
 from core.mcgill_engine import (
     format_citation,
@@ -409,6 +410,11 @@ _UNVERIFIED_MSG = (
     "legislation, journals, and books."
 )
 
+_NO_MATCH_MSG = (
+    "No matching legal source found. Check the spelling, or try a case name, "
+    "statute, or DOI."
+)
+
 _URL_UNREADABLE_MSG = (
     "We couldn't read this URL (some sites block automated access). "
     "Try uploading a full-page screenshot instead."
@@ -422,6 +428,14 @@ _JUR_NONE_MSG = (
 
 # Routes whose empty search result means "couldn't verify" rather than
 # "no match for these keywords".
+# A query that is nothing but a DOI (optionally prefixed "doi:" or given as a
+# doi.org link).  Such input must never reach the LLM classifier, which has no
+# DOI type and files it under "concept".
+_BARE_DOI_RE = re.compile(
+    r"^\s*(?:https?://(?:dx\.)?doi\.org/|doi\s*:\s*)?10\.\d{4,}/\S+\s*$",
+    re.IGNORECASE,
+)
+
 _UNVERIFIED_ROUTES = {"case_name", "citation_number", "legislation", "concept", "bill", "url"}
 
 
@@ -445,6 +459,10 @@ async def citation_query(body: CitationInput, request: Request):
         return cap_block
 
     query = body.input.strip()
+
+    # ── Step 0: bare DOI → CrossRef deterministic path (no LLM) ──
+    if _BARE_DOI_RE.match(query) and extract_doi(query):
+        return await run_in_threadpool(_cite_doi, query)
 
     # ── Step 1: classify ──
     # The pipeline below is fully synchronous and network-bound (LLM + legal
@@ -471,6 +489,8 @@ async def citation_query(body: CitationInput, request: Request):
 
     if not results:
         # Grounding failed — never emit an unverified citation
+        if route == "concept":
+            return _unsupported(route, _NO_MATCH_MSG)
         if route in _UNVERIFIED_ROUTES:
             return _unsupported(route, _UNVERIFIED_MSG)
         return _unsupported(route, "No matching results found. Try different keywords.")
@@ -540,6 +560,24 @@ async def citation_query(body: CitationInput, request: Request):
             True, route, "error", {},
             error={"reason": _USER_FACING_ERROR},
         )
+
+
+def _cite_doi(query: str) -> dict:
+    """Format a bare DOI typed into the main search box via CrossRef."""
+    try:
+        citation = format_citation({"raw_text": query}, doc_type="journal_article")
+    except ValueError as e:
+        _logger.warning("DOI processing failed: %s", e)
+        return _unsupported(
+            "doi",
+            "We couldn't find this DOI in CrossRef. Please check the identifier and try again.",
+        )
+    except Exception as e:
+        _logger.warning("DOI processing failed: %s", e)
+        return _envelope(False, "doi", "error", {}, error={"reason": _USER_FACING_ERROR})
+    return _envelope(True, "doi", "done", {
+        "citations": [{"citation": citation, "source_type": "journal_article"}],
+    }, debug=_collect_debug_info("doi"))
 
 
 async def _handle_concept(results: list, query: str) -> dict:

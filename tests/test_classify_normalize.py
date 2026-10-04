@@ -804,21 +804,18 @@ def test_expand_concept_gemini_malformed_json_falls_back():
     mock_ds.assert_called_once()
 
 
-def test_expand_concept_gemini_empty_content_falls_back():
-    """Gemini returns empty candidates list -> DeepSeek fallback."""
-    mock_ds = MagicMock(return_value=(
-        '{"candidates": ['
-        '{"name": "R v Gladue", "citation": "[1999] 1 SCR 688", "type": "case"}'
-        "]}"
-    ))
-    with patch("local_tools.citation_search.call_gemini_text_structured", return_value={"candidates": []}), \
-         patch("local_tools.citation_search.ask_deepseek", mock_ds), \
-         patch("local_tools.citation_search.fetch_by_citation"), \
-         patch("local_tools.citation_search.search_cases_multi", return_value=[]):
-        results = expand_concept("gladue principle")
+def test_expand_concept_gemini_empty_candidates_is_no_match():
+    """Gemini returns a well-formed empty list -> "no match", no DeepSeek fallback.
 
-    assert len(results) >= 1
-    mock_ds.assert_called_once()
+    Gibberish such as "asdfgh qwerty" used to fall back to the slow DeepSeek
+    thinking model and then surface as a generic server error.
+    """
+    mock_ds = MagicMock()
+    with patch("local_tools.citation_search.call_gemini_text_structured", return_value={"candidates": []}),          patch("local_tools.citation_search.ask_deepseek", mock_ds):
+        results = expand_concept("asdfgh qwerty")
+
+    assert results == []
+    mock_ds.assert_not_called()
 
 
 def test_expand_concept_double_failure_raises_value_error():

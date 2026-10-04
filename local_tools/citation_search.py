@@ -411,7 +411,9 @@ Rules:
     to Indigenous sentencing / s.718.2(e).
   * For any concept: if you cannot articulate which substantive legal doctrine the
     candidate is cited for, exclude it.
-  Quality over quantity."""
+  Quality over quantity.
+- If the query is not a recognizable legal concept, doctrine, case or statute (e.g. random
+  characters or an unrelated topic), return {{"candidates": []}}.  Never guess."""
 
     def _parse_llm_output(content: str) -> list | None:
         """解析 LLM 输出：剥离 ```json 标记后 json.loads。"""
@@ -716,6 +718,14 @@ Rules:
 
         if result is not None and isinstance(result, dict):
             candidates = result.get("candidates")
+            if candidates == []:
+                # A well-formed empty list is the model's answer for input that
+                # is not a legal concept (e.g. "asdfgh qwerty") — a "no match",
+                # not a failure.  Falling back here would spend ~15 s on the
+                # DeepSeek thinking model only to surface a generic server error.
+                logger.debug("[DUR] expand_concept END (gemini_no_match) — %.1fms",
+                             (time.perf_counter() - _fn_t0) * 1000)
+                return []
             if isinstance(candidates, list) and len(candidates) > 0:
                 gemini_succeeded = True
                 # Run A2AJ verification on every candidate (same as DeepSeek path)
@@ -740,6 +750,8 @@ Rules:
 
             items = _parse_llm_output(raw)
 
+            if items == []:
+                return []
             if not items:
                 logger.warning("[WARN] expand_concept DeepSeek fallback failed to parse")
                 raise ValueError("LLM expansion failed after fallback")

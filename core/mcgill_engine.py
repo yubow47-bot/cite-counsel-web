@@ -766,6 +766,22 @@ def _ensure_balanced_asterisks(citation: str) -> str:
     return stripped
 
 
+_STYLE_OF_CAUSE_RE = re.compile(r"^(\s*\*)([^*]+)(\*)")
+
+
+def _strip_versus_period(citation: str) -> str:
+    """McGill writes "v" (French "c") with no period: *Housen v Nikolaisen*.
+
+    Court and database titles carry "v." and the LLM copies it through, so
+    the italicized style of cause is normalized deterministically here.
+    """
+    def fix(m):
+        name = re.sub(r"(?<=\s)([vc])\.(?=\s)", r"\1", m.group(2))
+        name = re.sub(r"^R\.(?=\s+[vc]\s)", "R", name)
+        return m.group(1) + name + m.group(3)
+    return _STYLE_OF_CAUSE_RE.sub(fix, citation, count=1)
+
+
 def format_citation(extracted_fields: dict, doc_type: str | None = None) -> str:
     """对外主入口：自动判断类型 → 取规则 → 拼 prompt → 调 DeepSeek → 返回引用。
 
@@ -873,6 +889,8 @@ def format_citation(extracted_fields: dict, doc_type: str | None = None) -> str:
     _last_prompt = prompt
     _last_raw_response = result
     result = _ensure_balanced_asterisks(result)
+    if detected_type == "jurisprudence":
+        result = _strip_versus_period(result)
     if _last_source is None:
         _last_source = "deepseek"
     _f_elapsed = _fmt_time.perf_counter() - _f_t0

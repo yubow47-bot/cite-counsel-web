@@ -102,7 +102,7 @@ class TestConceptNeedsSelection:
         body = resp.json()
         assert body["status"] == "unsupported"
         assert body["route"] == "concept"
-        assert "couldn't verify" in body["error"]["reason"].lower()
+        assert "no matching legal source" in body["error"]["reason"].lower()
 
 
 # ── Cleanup ──
