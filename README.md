@@ -10,9 +10,66 @@ pinned: false
 
 # Cite Counsel Web
 
-Cite Counsel Web is an experimental web application that produces citations in the style of the *Canadian Guide to Uniform Legal Citation* (McGill Guide), 10th edition. It uses public metadata services, document extraction, and a language model to classify sources and format citations.
+[![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](requirements.txt)
+[![Next.js 16](https://img.shields.io/badge/Next.js-16-black.svg)](frontend/package.json)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Live site](https://img.shields.io/badge/live-citecounsel.com-8b1e1e.svg)](https://citecounsel.com)
 
-The repository is under active development. Treat every result as a research aid and check it against the source and the official McGill Guide before relying on it.
+Cite Counsel Web turns a case name, statute, bill, DOI, ISBN, URL, or uploaded file into a citation in McGill Guide (10th edition) style. Searches look the source up in public legal and bibliographic databases first and return no citation when nothing matches.
+
+| | |
+| --- | --- |
+| Problem | Canadian law students and researchers cite in McGill style by hand, and general AI chat tools can invent citation details. |
+| Approach | Classify the input, find the source in A2AJ, CanLII, LEGISinfo, Crossref, or Open Library, then format the citation. Bills are assembled by code with no language model. |
+| What it looks like | A Next.js site at [citecounsel.com](https://citecounsel.com) with three tabs: citation search, file or image, and URL. |
+| Stack | Next.js 16, React 19, TypeScript, Tailwind CSS 4; FastAPI on Python 3.11; Gemini and an OpenAI-compatible model. |
+| How well it works | 639 backend tests and 62 frontend tests pass, with external services mostly mocked. There is no accuracy benchmark yet. |
+| How to run it | Use the live site, or run it locally (see [Quick start](#quick-start)). |
+
+It is experimental and under active development, so check every citation against the source and the official McGill Guide before relying on it.
+
+## Example
+
+A bill lookup against the live API. This route uses no language model, so the same query returns the same citation:
+
+```bash
+curl -X POST https://yubo47-mcgill-citation-api.hf.space/api/citation \
+  -H "Content-Type: application/json" \
+  -d '{"input": "Bill S-2"}'
+```
+
+```json
+{
+    "ok": true,
+    "route": "bill",
+    "status": "done",
+    "data": {
+        "citations": [
+            {
+                "citation": "Bill S-2, *An Act to amend the Indian Act (new registration entitlements)*, 1st Sess, 45th Parl, 2025.",
+                "source_type": "bill"
+            }
+        ]
+    },
+    "debug": null,
+    "error": null
+}
+```
+
+The asterisks mark the italic title; the frontend renders them as italics.
+
+## Quick start
+
+The fastest way to try it is [citecounsel.com](https://citecounsel.com).
+
+To run the backend yourself with Docker (no image is published, so it builds locally):
+
+```bash
+docker build -t cite-counsel-api .
+docker run --rm -p 7860:7860 --env-file .env cite-counsel-api
+```
+
+`--env-file` needs a `.env` file to exist, but bill lookups work even when it is empty. Case, legislation, and file routes need `GEMINI_API_KEY` and an LLM key in `.env`; see [Configuration](#configuration). To point a local frontend at this container, start it with `NEXT_PUBLIC_API_BASE_URL=http://localhost:7860`; the frontend otherwise calls port 8000. To run both without Docker, see [Local development](#local-development).
 
 ## Live demo
 
@@ -98,7 +155,8 @@ These services supply source records and metadata. They do not check that the fi
 | Service | Used for | Credentials and limits |
 | --- | --- | --- |
 | A2AJ | Case and legislation searches and citation lookup/verification. | No API key is configured by this project. Coverage depends on A2AJ's available records. |
-| LEGISinfo | Federal bill lookup and bill citation details. | Public endpoint; no API key configured. Federal bills only. |
+| CanLII | Case and legislation citations that A2AJ does not carry. | Requires `CANLII_API_KEY`. |
+| LEGISinfo | Federal bill lookup and bill citation details. | Public endpoint; no API key configured. Federal bills only. When parl.ca refuses the request, the backend reads the same bill data from openparliament.ca, which starts at the 37th Parliament (2001). |
 | Crossref | DOI metadata for journal articles. | Public API; no API key configured. Depends on DOI registration and available metadata. |
 | Open Library | ISBN metadata for books. | Public API; no API key configured. Depends on catalog coverage. |
 
