@@ -8,9 +8,9 @@ app_port: 7860
 pinned: false
 ---
 
-# Cite Counsel
+# Cite Counsel Web
 
-Cite Counsel is an experimental web application for producing citations in the style of the *Canadian Guide to Uniform Legal Citation* (McGill Guide), 10th edition. It combines public metadata services, document extraction, and language-model-assisted classification and formatting.
+Cite Counsel Web is an experimental web application for producing citations in the style of the *Canadian Guide to Uniform Legal Citation* (McGill Guide), 10th edition. It combines public metadata services, document extraction, and language-model-assisted classification and formatting.
 
 This repository is under active development. A successful response is a research aid, not a guarantee that a citation is correct. Check every result against the source and the official McGill Guide before relying on it.
 
