@@ -202,4 +202,4 @@ Application routes return a common JSON envelope:
 
 This code does not include or replace the McGill Guide. The Guide is a separate copyrighted publication and remains the authoritative source for its rules.
 
-No open-source license file is currently included. Until one is added, public visibility does not grant permission to copy, modify, or redistribute the code.
+This project is licensed under the [MIT License](LICENSE). The license applies to this project's code, not to the McGill Guide.
