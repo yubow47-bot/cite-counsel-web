@@ -28,34 +28,78 @@ When a search has several verified matches, the frontend asks the user to select
 
 A deterministic manual form also exists, but it is disabled by default. It must be enabled in both the frontend and API, and its output is explicitly marked unverified.
 
-### CanLII status
+## Project architecture and request flow
 
-The repository contains a CanLII adapter and fallback branches for selected case and legislation lookups. They require `CANLII_API_KEY`, but they are experimental and are **not a supported or reliably verified product capability**. Unit tests around these branches use mocks and do not establish live API coverage. The normal documented setup does not require a CanLII key.
+Users enter a citation query, provide a file, or submit a URL in the Next.js interface. FastAPI routes the request through search or extraction as appropriate, formats the resulting source details, and returns a citation to the browser. Queries with several matches return candidates for user confirmation before the selected source is formatted.
 
-## How a request moves through the project
+```mermaid
+flowchart TB
+    subgraph Intake[Input]
+        direction LR
+        Input[User input<br/>Citation query, file, or URL] --> UI[Next.js input<br/>web interface]
+        UI --> API[FastAPI backend]
+        API --> Route{Input type?}
+    end
 
-```text
-Next.js frontend
-  ├─ citation query ──> POST /api/citation ──> optional candidate selection
-  │                                           POST /api/citation/select
-  ├─ file/image ─────> POST /api/extract/file
-  └─ URL/DOI/ISBN ──> POST /api/extract/url
+    subgraph Processing[Search, extraction, and source assistance]
+        direction LR
+        subgraph Pipeline[Search and citation pipeline]
+            direction TB
+            Search[Classify and search for sources]
+            Match{Search matches}
+            Candidates[Show candidate results]
+            Confirm[User confirms a candidate]
+            SelectionAPI[FastAPI validates selection]
+            Extract[Extract source content and metadata]
+            Format[Citation formatting]
+        end
+        subgraph Support[External services]
+            direction TB
+            LegalData[A2AJ and LEGISinfo<br/>legal records]
+            Metadata[Crossref and Open Library<br/>DOI / ISBN metadata]
+            LLM[LLM]
+        end
+    end
 
-FastAPI
-  ├─ input validation, upload checks, rate limiting, and candidate signatures
-  ├─ A2AJ / LEGISinfo / Crossref / Open Library lookups
-  ├─ local document and web-page extraction
-  └─ Gemini or an OpenAI-compatible completion endpoint for model-assisted steps
+    Route -->|Citation query| Search
+    Route -->|File or URL| Extract
+    Search --> Match
+    Match -->|One match| Format
+    Match -->|Several matches| Candidates
+    Candidates --> Confirm
+    Confirm -->|Selected signed candidate| SelectionAPI
+    SelectionAPI --> Format
+    Extract --> Format
+
+    LegalData -.->|Legal source lookup| Search
+    Metadata -.->|DOI or ISBN metadata lookup| Format
+    LLM -.->|Text classification and search assistance| Search
+    LLM -.->|Citation formatting| Format
+    LLM -.->|OCR: images and scanned PDFs| Extract
+
+    Format --> Result[Formatted citation returned]
+    Result --> Display[Shown in the Next.js web interface]
 ```
 
 Other implemented API routes include health and warm-up checks, feedback collection, and a non-streaming chat endpoint. The current frontend does not expose the chat endpoint.
+
+## External data sources
+
+These services provide source records or metadata; they do not certify that the final citation follows the Guide.
+
+| Service | Used for | Credentials and limits |
+| --- | --- | --- |
+| A2AJ | Case and legislation searches and citation lookup/verification. | No API key is configured by this project. Coverage depends on A2AJ's available records. |
+| LEGISinfo | Federal bill lookup and bill citation details. | Public endpoint; no API key configured. Federal bills only. |
+| Crossref | DOI metadata for journal articles. | Public API; no API key configured. Depends on DOI registration and available metadata. |
+| Open Library | ISBN metadata for books. | Public API; no API key configured. Depends on catalog coverage. |
 
 ## Technology stack
 
 - Frontend: Next.js 16, React 19, TypeScript 5.7, Tailwind CSS 4, Base UI, Vitest, and Testing Library.
 - Backend: Python 3.11, FastAPI, Uvicorn, and Pydantic.
 - Extraction: trafilatura, pdfplumber, PyMuPDF, python-docx, python-pptx, and openpyxl.
-- Integrations: A2AJ, LEGISinfo, Crossref, Open Library, Gemini, and DeepSeek or another OpenAI-compatible completion service.
+- Integrations: A2AJ, LEGISinfo, Crossref, Open Library, Gemini, and an OpenAI-compatible text-completions service.
 
 Key directories:
 
@@ -105,37 +149,15 @@ Open `http://localhost:3000`. Unless overridden at build time, the frontend call
 
 ## Configuration
 
-Put backend secrets in a root `.env` file or in the deployment platform's secret store. `.env` is ignored by Git. Do not prefix private values with `NEXT_PUBLIC_`; Next.js embeds those variables in browser-delivered code.
+Backend settings belong in the root `.env` file or deployment secrets; `.env` is ignored by Git. Never expose private keys through `NEXT_PUBLIC_` variables. No checked-in environment example is provided.
 
-### Core settings
+For text completions, the code supports one key for the configured OpenAI-compatible endpoint (`LLM_API_KEY`; `OPENROUTER_API_KEY` is also accepted). Set `LLM_COMPLETIONS_URL` to use that endpoint and `LLM_DEFAULT_MODEL` to select its model. The default endpoint is DeepSeek direct and requires `DEEPSEEK_API_KEY` instead. This completion setting is used for text-based fallback/search assistance and citation formatting; it does not configure image understanding.
 
-| Variable | When needed | Description |
-| --- | --- | --- |
-| `GEMINI_API_KEY` | Search classification and image/scanned-PDF extraction | Gemini API credential. |
-| `DEEPSEEK_API_KEY` | Default formatting and fallback model calls | Credential for the default DeepSeek completions endpoint. |
-| `LLM_COMPLETIONS_URL` | Optional | Replaces the default DeepSeek URL with an OpenAI-compatible endpoint. |
-| `OPENROUTER_API_KEY` or `LLM_API_KEY` | With a custom completions URL | Credential used for the compatible endpoint. |
-| `LLM_DEFAULT_MODEL` | Optional | Model identifier for compatible completion calls; defaults to `deepseek-v4-flash` on DeepSeek direct, `qwen/qwen3.7-flash` on a custom endpoint. |
-| `GEMINI_TEXT_MODEL`, `GEMINI_VISION_MODEL` | Optional | Override the Gemini text and vision models. |
-| `NEXT_PUBLIC_API_BASE_URL` | Frontend deployment | Public base URL of the FastAPI service. |
-| `ALLOWED_ORIGINS` | Backend deployment | Comma-separated CORS origins; defaults to `http://localhost:3000`. |
-| `CANDIDATE_SIGNING_KEY` | Production, especially multiple workers | High-entropy shared secret used to sign candidate payloads. Without it, each process creates an ephemeral key. |
-
-### Operational and optional settings
-
-| Variable | Default | Description |
-| --- | --- | --- |
-| `MAX_UPLOAD_MB` | `50` | Maximum accepted upload size. |
-| `RATE_LIMIT_PER_MIN` / `RATE_LIMIT_PER_HOUR` | `30` / `200` | In-memory per-client request limits. |
-| `DAILY_SPEND_CAP_USD` | `10` | Daily model-spend guard. |
-| `DEBUG_RESPONSES` | `false` | Includes internal debug data in API responses when enabled; keep off publicly. |
-| `HF_SPEND_DATASET` / `HF_TOKEN` | unset | Optional Hugging Face Dataset persistence for spend and feedback records. |
-| `DISCORD_FEEDBACK_WEBHOOK` | unset | Optional feedback notification destination. |
-| `NEXT_PUBLIC_GA_MEASUREMENT_ID` | unset | Optional public Google Analytics measurement ID. |
+The current query classifier calls Gemini text, and image or scanned-PDF extraction calls Gemini Vision. Both use `GEMINI_API_KEY`, so a standard setup that needs these paths requires a separate Gemini key. A text-only compatible model cannot replace the visual/OCR capability; this repository has not wired a generic multimodal endpoint for those file paths. `GEMINI_TEXT_MODEL` and `GEMINI_VISION_MODEL` optionally override Gemini model names. Deployment-specific settings include `NEXT_PUBLIC_API_BASE_URL`, `ALLOWED_ORIGINS`, and a stable `CANDIDATE_SIGNING_KEY`; see the deployment notes below.
 
 ## Verification
 
-Backend unit tests are collected only from `tests/`; scripts under `profiling/` may make live paid API calls and are intentionally excluded by `pytest.ini`.
+Run the backend and frontend checks from the repository root:
 
 ```powershell
 python -m pytest
@@ -146,28 +168,18 @@ npm run lint
 npm run build
 ```
 
-Most integration tests mock external providers. Passing the suite does not prove that an upstream API, credential, model, or deployment is currently available. Use the scripts under `scripts/` only when you intentionally want a live provider check and understand its credential and cost implications.
+Backend unit tests are collected from `tests/`; provider integrations are mostly mocked, so these checks do not establish live service availability.
 
 ## Deployment
 
-The root `Dockerfile` builds the FastAPI service only and starts it on port `7860`:
+The root Dockerfile runs the FastAPI backend on port `7860`; deploy the Next.js app separately and set `NEXT_PUBLIC_API_BASE_URL` to the backend URL. Configure backend CORS (`ALLOWED_ORIGINS`) for the frontend origin and use a stable `CANDIDATE_SIGNING_KEY` when running multiple workers. For a local container:
 
 ```powershell
 docker build -t cite-counsel-api .
 docker run --rm -p 7860:7860 --env-file .env cite-counsel-api
 ```
 
-Deploy `frontend/` separately. Set `NEXT_PUBLIC_API_BASE_URL` before the frontend production build and configure the backend's CORS policy for the deployed frontend.
-
-Before a public deployment, review these implementation details:
-
-- API routes are unauthenticated. The included rate limiter is per-process memory, so it is not a distributed abuse-control system.
-- `api/main.py` allows configured origins and also contains a `https://*.vercel.app` CORS regex. Narrow or remove that regex if previews from arbitrary Vercel subdomains should not reach the API.
-- Keep `DEBUG_RESPONSES=false`. Treat uploaded documents, URLs, citation queries, and feedback as potentially sensitive user data.
-- Feedback is written to `data/feedback.jsonl` and may also be sent to Hugging Face and Discord when configured. Establish retention and disclosure policies before enabling public traffic.
-- Uploads are restricted by extension, size, and file signature, and temporary files are deleted after processing. Continue to isolate parsers and keep dependencies patched.
-- URL fetching uses an SSRF guard, but it should still run with restricted network permissions in production.
-- Use HTTPS and a stable, random `CANDIDATE_SIGNING_KEY`; never place provider keys in frontend variables or commit `.env` files.
+Additional backend settings and routes are documented in [`api_contract.md`](api_contract.md). The current API has no authentication; its rate limits are per process.
 
 ## API response contract
 
