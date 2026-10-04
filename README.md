@@ -23,7 +23,7 @@ Cite Counsel Web turns a case name, statute, bill, DOI, ISBN, URL, or uploaded f
 | Approach | Classify the input, find the source in A2AJ, CanLII, LEGISinfo, Crossref, or Open Library, then format the citation. Bills are assembled by code with no language model. |
 | What it looks like | A Next.js site at [citecounsel.com](https://citecounsel.com) with three tabs: citation search, file or image, and URL. |
 | Stack | Next.js 16, React 19, TypeScript, Tailwind CSS 4; FastAPI on Python 3.11; Gemini and an OpenAI-compatible model. |
-| How well it works | 639 backend tests and 62 frontend tests pass, with external services mostly mocked. There is no accuracy benchmark yet. |
+| How well it works | 625 backend tests and 62 frontend tests pass offline in CI; no API keys or network are needed, and a socket guard fails any test that tries to reach the network. 14 LEGISinfo tests call the live service and run only with `RUN_LIVE_TESTS=1`. There is no accuracy benchmark yet. |
 | How to run it | Use the live site, or run it locally (see [Quick start](#quick-start)). |
 
 It is experimental and under active development, so check every citation against the source and the official McGill Guide before relying on it.
@@ -234,7 +234,7 @@ npm run lint
 npm run build
 ```
 
-Backend tests live in `tests/`. Provider integrations are mostly mocked, so passing tests say nothing about whether the live services are up.
+Backend tests live in `tests/`. The default run is offline: provider calls are mocked, placeholder keys replace any real ones, and `tests/conftest.py` blocks DNS and outbound sockets, failing any test that tries to use them. Tests marked `live` call the real LEGISinfo service and run only with `RUN_LIVE_TESTS=1` (in PowerShell, `$env:RUN_LIVE_TESTS=1`). Passing offline tests say nothing about whether the live services are up.
 
 ## Deployment
 

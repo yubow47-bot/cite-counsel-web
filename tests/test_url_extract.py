@@ -140,6 +140,7 @@ class TestExtractUrlOnly:
             patch("api.main.extract_from_url") as m_extract,
             patch("api.main.format_citation") as m_fmt,
             patch("api.main.get_last_debug") as m_dbg,
+            patch("api.main.classify_document_type", return_value="other"),
         ):
             m_extract.return_value = FAKE_URL_FIELDS
             m_fmt.return_value = "*Test Citation*, 2023."

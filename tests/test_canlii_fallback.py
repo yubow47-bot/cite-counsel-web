@@ -7,6 +7,8 @@ import os
 import sys
 from unittest.mock import patch, MagicMock
 
+import requests
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from local_tools.citation_search import (
@@ -1020,7 +1022,9 @@ def test_verify_legislation_strips_pinpoint_from_name():
 
     with patch("local_tools.citation_search.call_gemini_text_structured", return_value=None), \
          patch("local_tools.citation_search.ask_deepseek", mock_llm), \
-         patch("local_tools.utils.request_with_retry", mock_a2aj):
+         patch("local_tools.utils.request_with_retry", mock_a2aj), \
+         patch("local_tools.a2aj_api.request_with_retry",
+               side_effect=requests.exceptions.ConnectionError("case lookup not under test")):
         results = expand_concept("gladue principle")
 
     # Find the legislation candidate
@@ -1054,7 +1058,9 @@ def test_verify_legislation_no_pinpoint_unchanged():
 
     with patch("local_tools.citation_search.call_gemini_text_structured", return_value=None), \
          patch("local_tools.citation_search.ask_deepseek", mock_llm), \
-         patch("local_tools.utils.request_with_retry", mock_a2aj):
+         patch("local_tools.utils.request_with_retry", mock_a2aj), \
+         patch("local_tools.a2aj_api.request_with_retry",
+               side_effect=requests.exceptions.ConnectionError("case lookup not under test")):
         results = expand_concept("gladue principle")
 
     leg = [r for r in results if r.get("role") == "legislation"]
@@ -1083,7 +1089,9 @@ def test_verify_legislation_no_citmatch_fallback():
 
     with patch("local_tools.citation_search.call_gemini_text_structured", return_value=None), \
          patch("local_tools.citation_search.ask_deepseek", mock_llm), \
-         patch("local_tools.utils.request_with_retry", mock_a2aj):
+         patch("local_tools.utils.request_with_retry", mock_a2aj), \
+         patch("local_tools.a2aj_api.request_with_retry",
+               side_effect=requests.exceptions.ConnectionError("case lookup not under test")):
         results = expand_concept("gladue principle")
 
     leg = [r for r in results if r.get("role") == "legislation"]

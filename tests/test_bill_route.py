@@ -12,10 +12,20 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 # Ensure project root is on sys.path
 _PROJ = Path(__file__).resolve().parent.parent
 if str(_PROJ) not in sys.path:
     sys.path.insert(0, str(_PROJ))
+
+
+@pytest.fixture(autouse=True)
+def _no_legisinfo():
+    """Keep the routing tests offline: LEGISinfo knows no bills here, so the
+    bill branch takes its unverified path on every machine."""
+    with patch("local_tools.legisinfo_api.fetch_legisinfo_bills", return_value=[]):
+        yield
 
 
 def test_classifier_regex_all_variants():
